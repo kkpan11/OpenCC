@@ -1,7 +1,7 @@
 /*
  * Open Chinese Convert
  *
- * Copyright 2015 Carbo Kuo <byvoid@byvoid.com>
+ * Copyright 2015-2026 Carbo Kuo and contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
  */
 
 #include <thread>
+#include <string_view>
 
 #include "ConfigTestBase.hpp"
 #include "SimpleConverter.hpp"
@@ -31,8 +32,8 @@ protected:
 
   void TestConverter(const std::string& config) const {
     const SimpleConverter converter(config);
-    const std::string& converted =
-        converter.Convert(utf8("燕燕于飞差池其羽之子于归远送于野"));
+    const std::string converted = converter.Convert(
+        std::string_view(utf8("燕燕于飞差池其羽之子于归远送于野")));
     EXPECT_EQ(utf8("燕燕于飛差池其羽之子于歸遠送於野"), converted);
   }
 };

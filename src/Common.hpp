@@ -30,7 +30,6 @@
 
 #include "Export.hpp"
 #include "Optional.hpp"
-#include "opencc_config.h"
 
 // Forward decalarations and alias
 namespace opencc {
@@ -62,12 +61,10 @@ typedef std::shared_ptr<Segments> SegmentsPtr;
 typedef std::shared_ptr<SerializableDict> SerializableDictPtr;
 typedef std::shared_ptr<TextDict> TextDictPtr;
 
-#ifdef OPENCC_ENABLE_DARTS
 class BinaryDict;
 class DartsDict;
 typedef std::shared_ptr<BinaryDict> BinaryDictPtr;
 typedef std::shared_ptr<DartsDict> DartsDictPtr;
-#endif
 
 } // namespace opencc
 
@@ -77,6 +74,13 @@ const std::string PACKAGE_DATA_DIRECTORY = "";
 const std::string PACKAGE_DATA_DIRECTORY = PKGDATADIR "/";
 #endif // ifndef PKGDATADIR
 
-#ifndef VERSION
-#define VERSION "1.0.*"
-#endif // ifndef VERSION
+#ifndef OPENCC_SEGMENTATION_PLUGIN_DIR
+const std::string PACKAGE_SEGMENTATION_PLUGIN_DIRECTORY = "";
+#else
+const std::string PACKAGE_SEGMENTATION_PLUGIN_DIRECTORY =
+    OPENCC_SEGMENTATION_PLUGIN_DIR "/";
+#endif
+
+#ifndef OPENCC_VERSION
+#define OPENCC_VERSION "1.3.*"
+#endif // ifndef OPENCC_VERSION

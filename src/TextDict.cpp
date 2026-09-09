@@ -1,7 +1,7 @@
 /*
  * Open Chinese Convert
  *
- * Copyright 2010-2020 Carbo Kuo <byvoid@byvoid.com>
+ * Copyright 2010-2026 Carbo Kuo and contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,23 @@ TextDictPtr TextDict::NewFromSortedFile(FILE* fp) {
 }
 
 TextDictPtr TextDict::NewFromFile(FILE* fp) {
-  const LexiconPtr& lexicon = Lexicon::ParseLexiconFromFile(fp);
+  return NewFromFile(fp, '\t');
+}
+
+TextDictPtr TextDict::NewFromFile(FILE* fp, char keyValueDelimiter) {
+  const LexiconPtr& lexicon =
+      Lexicon::ParseLexiconFromFile(fp, keyValueDelimiter);
+  lexicon->Sort();
+  std::string dupkey;
+  if (!lexicon->IsUnique(&dupkey)) {
+    throw InvalidFormat(
+        "The text dictionary contains duplicated keys: " + dupkey + ".");
+  }
+  return TextDictPtr(new TextDict(lexicon));
+}
+
+TextDictPtr TextDict::NewFromBuffer(const char* data, size_t size) {
+  const LexiconPtr& lexicon = Lexicon::ParseLexiconFromBuffer(data, size);
   lexicon->Sort();
   std::string dupkey;
   if (!lexicon->IsUnique(&dupkey)) {

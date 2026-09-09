@@ -1,7 +1,7 @@
 /*
  * Open Chinese Convert
  *
- * Copyright 2015 Carbo Kuo <byvoid@byvoid.com>
+ * Copyright 2015-2026 Carbo Kuo and contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ void Extract(const std::vector<std::string>& inputFiles,
 int main(int argc, const char* argv[]) {
   try {
     TCLAP::CmdLine cmd("Open Chinese Convert (OpenCC) Phrase Extractor", ' ',
-                       VERSION);
+                       OPENCC_VERSION);
     CmdLineOutput cmdLineOutput;
     cmd.setOutput(&cmdLineOutput);
     TCLAP::UnlabeledMultiArg<std::string> fileNames(

@@ -22,9 +22,10 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <Windows.h>
+#include <windows.h>
 #endif // _MSC_VER
 
+#include <cstdint>
 #include <cstring>
 
 #include "Common.hpp"
@@ -47,7 +48,7 @@ public:
    * On error returns 0.
    */
   static size_t NextCharLengthNoException(const char* str) {
-    char ch = *str;
+    const unsigned char ch = static_cast<unsigned char>(*str);
     if ((ch & 0xF0) == 0xE0) {
       return 3;
     } else if ((ch & 0x80) == 0x00) {
@@ -79,29 +80,20 @@ public:
    * Returns the length in byte for the previous UTF8 character.
    */
   static size_t PrevCharLength(const char* str) {
-    {
-      const size_t length = NextCharLengthNoException(str - 3);
-      if (length == 3) {
-        return length;
+    const char* candidate = str - 1;
+    size_t distance = 1;
+    while (distance < 6) {
+      const unsigned char ch = static_cast<unsigned char>(*candidate);
+      if ((ch & 0xC0) != 0x80) {
+        break;
       }
+      candidate--;
+      distance++;
     }
-    {
-      const size_t length = NextCharLengthNoException(str - 1);
-      if (length == 1) {
-        return length;
-      }
-    }
-    {
-      const size_t length = NextCharLengthNoException(str - 2);
-      if (length == 2) {
-        return length;
-      }
-    }
-    for (size_t i = 4; i <= 6; i++) {
-      const size_t length = NextCharLengthNoException(str - i);
-      if (length == i) {
-        return length;
-      }
+
+    const size_t length = NextCharLengthNoException(candidate);
+    if (length == distance) {
+      return length;
     }
     throw InvalidUTF8(str);
   }
@@ -121,13 +113,140 @@ public:
   }
 
   /**
-   * Returns the UTF8 length of a valid UTF8 std::string.
+   * Code point bounds of the ideographic description operators recognized
+   * by IdeographicDescriptionOperatorArity(). Skip-scan tables iterate this
+   * range to keep IDS handling consistent with the conversion loop; when
+   * extending the switch below (e.g. with U+31EF), update these bounds too.
+   */
+  static const uint32_t kFirstIdeographicDescriptionOperator = 0x2FF0;
+  static const uint32_t kLastIdeographicDescriptionOperator = 0x2FFF;
+
+  static size_t IdeographicDescriptionOperatorArity(uint32_t codePoint) {
+    switch (codePoint) {
+    case 0x2FF2:
+    case 0x2FF3:
+      return 3;
+    case 0x2FFE:
+    case 0x2FFF:
+      return 1;
+    case 0x2FF0:
+    case 0x2FF1:
+    case 0x2FF4:
+    case 0x2FF5:
+    case 0x2FF6:
+    case 0x2FF7:
+    case 0x2FF8:
+    case 0x2FF9:
+    case 0x2FFA:
+    case 0x2FFB:
+    case 0x2FFC:
+    case 0x2FFD:
+      return 2;
+    default:
+      return 0;
+    }
+  }
+
+  static size_t NextIdeographicDescriptionSequenceLength(const char* str,
+                                                         size_t len) {
+    const size_t kMaxIDSDepth = 16;
+    const size_t kMaxIDSCodePoints = 64;
+    if (len == 0) {
+      return 0;
+    }
+    const size_t charLen = NextCharLengthNoException(str);
+    if (charLen == 0 || charLen > len) {
+      return 0;
+    }
+    const uint32_t codePoint = CodePointNoException(str, charLen);
+    if (IdeographicDescriptionOperatorArity(codePoint) == 0) {
+      return 0;
+    }
+
+    size_t consumed = 0;
+    size_t codePoints = 0;
+    if (ConsumeIdeographicDescriptionSequence(
+            str, len, kMaxIDSDepth, kMaxIDSCodePoints, &consumed,
+            &codePoints) == IDSParseStatus::Complete) {
+      return consumed;
+    }
+    return 0;
+  }
+
+  static bool IsIncompleteIdeographicDescriptionSequencePrefix(const char* str,
+                                                               size_t len) {
+    const size_t kMaxIDSDepth = 16;
+    const size_t kMaxIDSCodePoints = 64;
+    if (len == 0) {
+      return false;
+    }
+    const size_t charLen = NextCharLengthNoException(str);
+    if (charLen == 0 || charLen > len) {
+      return false;
+    }
+    const uint32_t codePoint = CodePointNoException(str, charLen);
+    if (IdeographicDescriptionOperatorArity(codePoint) == 0) {
+      return false;
+    }
+
+    size_t consumed = 0;
+    size_t codePoints = 0;
+    return ConsumeIdeographicDescriptionSequence(
+               str, len, kMaxIDSDepth, kMaxIDSCodePoints, &consumed,
+               &codePoints) == IDSParseStatus::Incomplete;
+  }
+
+  static bool IsVariationSelector(uint32_t codePoint) {
+    return (codePoint >= 0xFE00 && codePoint <= 0xFE0F) ||
+           (codePoint >= 0xE0100 && codePoint <= 0xE01EF);
+  }
+
+  static bool ContainsVariationSelector(const char* str, size_t len) {
+    const char* pStr = str;
+    const char* strEnd = str + len;
+    while (pStr < strEnd) {
+      const size_t remainingLength = strEnd - pStr;
+      const size_t charLen = NextCharLengthNoException(pStr);
+      if (charLen == 0) {
+        ++pStr;
+        continue;
+      }
+      if (charLen > remainingLength) {
+        return false;
+      }
+      if (IsVariationSelector(CodePointNoException(pStr, charLen))) {
+        return true;
+      }
+      pStr += charLen;
+    }
+    return false;
+  }
+
+  /**
+   * Returns the UTF8 length of a null-terminated string.
+   * Throws InvalidUTF8 for invalid or truncated byte sequences.
+   * The truncated-sequence check reads only up to the null terminator, so it
+   * does not read out of bounds (issue #799 fix).
    */
   static size_t Length(const char* str) {
     size_t length = 0;
     while (*str != '\0') {
-      str = NextChar(str);
-      length++;
+      const size_t charLen = NextCharLengthNoException(str);
+      if (charLen == 0) {
+        throw InvalidUTF8(str);
+      }
+      // Verify all continuation bytes are present before the null terminator.
+      // Use a while loop (not a for-with-return) to avoid complex control flow
+      // that triggers MSVC LTCG code-generator bugs.
+      size_t i = 1;
+      while (i < charLen && str[i] != '\0') {
+        ++i;
+      }
+      if (i < charLen) {
+        throw InvalidUTF8(str); // Truncated sequence: throw, don't silently skip
+      }
+      str += charLen;
+      ++length;
     }
     return length;
   }
@@ -158,7 +277,7 @@ public:
   static std::string FromSubstr(const char* str, size_t length) {
     std::string newStr;
     newStr.resize(length);
-    strncpy(const_cast<char*>(newStr.c_str()), str, length);
+    memcpy(newStr.data(), str, length);
     return newStr;
   }
 
@@ -287,5 +406,69 @@ public:
     return ret;
   }
 #endif // _MSC_VER
+
+private:
+  enum class IDSParseStatus {
+    Complete,
+    Incomplete,
+    Invalid,
+  };
+
+  static uint32_t CodePointNoException(const char* str, size_t charLen) {
+    const unsigned char first = static_cast<unsigned char>(str[0]);
+    if (charLen == 1) {
+      return first;
+    }
+
+    uint32_t codePoint = first & ((1U << (7 - charLen)) - 1);
+    for (size_t i = 1; i < charLen; i++) {
+      codePoint = (codePoint << 6) |
+                  (static_cast<unsigned char>(str[i]) & 0x3FU);
+    }
+    return codePoint;
+  }
+
+  static IDSParseStatus ConsumeIdeographicDescriptionSequence(
+      const char* str, size_t len, size_t depthLeft, size_t maxCodePoints,
+      size_t* consumed, size_t* codePoints) {
+    if (len == 0) {
+      return IDSParseStatus::Incomplete;
+    }
+    if (depthLeft == 0 || *codePoints >= maxCodePoints) {
+      return IDSParseStatus::Invalid;
+    }
+    const size_t charLen = NextCharLengthNoException(str);
+    if (charLen == 0) {
+      return IDSParseStatus::Invalid;
+    }
+    if (charLen > len) {
+      return IDSParseStatus::Incomplete;
+    }
+    ++(*codePoints);
+
+    const uint32_t codePoint = CodePointNoException(str, charLen);
+    const size_t arity = IdeographicDescriptionOperatorArity(codePoint);
+    if (arity == 0) {
+      *consumed = charLen;
+      return IDSParseStatus::Complete;
+    }
+
+    size_t offset = charLen;
+    for (size_t i = 0; i < arity; i++) {
+      if (offset >= len) {
+        return IDSParseStatus::Incomplete;
+      }
+      size_t operandLength = 0;
+      const IDSParseStatus operandStatus = ConsumeIdeographicDescriptionSequence(
+          str + offset, len - offset, depthLeft - 1, maxCodePoints,
+          &operandLength, codePoints);
+      if (operandStatus != IDSParseStatus::Complete) {
+        return operandStatus;
+      }
+      offset += operandLength;
+    }
+    *consumed = offset;
+    return IDSParseStatus::Complete;
+  }
 };
 } // namespace opencc

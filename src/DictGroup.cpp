@@ -1,7 +1,7 @@
 /*
  * Open Chinese Convert
  *
- * Copyright 2010-2021 Carbo Kuo <byvoid@byvoid.com>
+ * Copyright 2010-2026 Carbo Kuo and contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,12 @@ size_t GetKeyMaxLength(const std::list<DictPtr>& dicts) {
 } // namespace
 
 DictGroup::DictGroup(const std::list<DictPtr>& _dicts)
-    : keyMaxLength(GetKeyMaxLength(_dicts)), dicts(_dicts) {}
+    : DictGroup(_dicts, DictGroupMatchPolicy::ShortCircuit) {}
+
+DictGroup::DictGroup(const std::list<DictPtr>& _dicts,
+                     DictGroupMatchPolicy _matchPolicy)
+    : keyMaxLength(GetKeyMaxLength(_dicts)), dicts(_dicts),
+      matchPolicy(_matchPolicy) {}
 
 DictGroup::~DictGroup() {}
 
@@ -104,4 +109,27 @@ LexiconPtr DictGroup::GetLexicon() const {
 DictGroupPtr DictGroup::NewFromDict(const Dict& dict) {
   TextDictPtr newDict = TextDict::NewFromDict(dict);
   return DictGroupPtr(new DictGroup(std::list<DictPtr>{newDict}));
+}
+
+UnionDictGroup::UnionDictGroup(const std::list<DictPtr>& _dicts)
+    : DictGroup(_dicts, DictGroupMatchPolicy::Union) {}
+
+Optional<const DictEntry*> UnionDictGroup::MatchPrefix(const char* word,
+                                                       size_t len) const {
+  Optional<const DictEntry*> best = Optional<const DictEntry*>::Null();
+  const std::list<DictPtr>* items = GetDictGroupItems();
+  if (items == nullptr) {
+    return best;
+  }
+  for (const DictPtr& dict : *items) {
+    const Optional<const DictEntry*>& prefix = dict->MatchPrefix(word, len);
+    if (prefix.IsNull()) {
+      continue;
+    }
+    if (best.IsNull() ||
+        prefix.Get()->KeyLength() > best.Get()->KeyLength()) {
+      best = prefix;
+    }
+  }
+  return best;
 }

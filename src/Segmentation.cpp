@@ -1,7 +1,7 @@
 /*
  * Open Chinese Convert
  *
- * Copyright 2010-2014 Carbo Kuo <byvoid@byvoid.com>
+ * Copyright 2010-2026 Carbo Kuo and contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,3 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+#include "Segmentation.hpp"
+
+using namespace opencc;
+
+SegmentsPtr Segmentation::Segment(const char* text) const {
+  return Segment(std::string_view(text));
+}
+
+SegmentsPtr Segmentation::Segment(const std::string& str) const {
+  return Segment(std::string_view(str));
+}

@@ -18,7 +18,9 @@
 
 #pragma once
 
-#include <sstream>
+#include <cstring>
+#include <iterator>
+#include <string_view>
 
 #include "Common.hpp"
 
@@ -53,8 +55,16 @@ public:
     managed.push_back(str);
   }
 
-  class iterator : public std::iterator<std::input_iterator_tag, const char*> {
+  void AddSegment(std::string_view sv) {
+    indexes.push_back(std::make_pair(managed.size(), true));
+    managed.emplace_back(sv);
+  }
+
+  class iterator {
   public:
+    using iterator_category = std::input_iterator_tag;
+    using value_type = const char*;
+
     iterator(const Segments* const _segments, size_t _cursor)
         : segments(_segments), cursor(_cursor) {}
 
@@ -94,13 +104,26 @@ public:
   iterator end() const { return iterator(this, indexes.size()); }
 
   std::string ToString() const {
-    // TODO implement a nested structure to reduce concatenation,
-    // like a purely functional differential list
-    std::ostringstream buffer;
+    size_t totalLength = 0;
     for (const char* segment : *this) {
-      buffer << segment;
+      totalLength += std::strlen(segment);
     }
-    return buffer.str();
+
+    std::string buffer;
+    buffer.reserve(totalLength);
+    for (const char* segment : *this) {
+      buffer.append(segment);
+    }
+    return buffer;
+  }
+
+  std::vector<std::string> ToVector() const {
+    std::vector<std::string> result;
+    result.reserve(indexes.size());
+    for (const char* segment : *this) {
+      result.emplace_back(segment);
+    }
+    return result;
   }
 
 private:

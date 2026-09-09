@@ -1,7 +1,7 @@
 /*
  * Open Chinese Convert
  *
- * Copyright 2010-2014 Carbo Kuo <byvoid@byvoid.com>
+ * Copyright 2010-2026 Carbo Kuo and contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,22 +16,39 @@
  * limitations under the License.
  */
 
-#include <cstring>
-
-#include "ConversionChain.hpp"
 #include "Converter.hpp"
-#include "Segments.hpp"
+#include "StreamWindow.hpp"
 
 using namespace opencc;
 
-std::string Converter::Convert(const std::string& text) const {
-  const SegmentsPtr& segments = segmentation->Segment(text);
-  const SegmentsPtr& converted = conversionChain->Convert(segments);
-  return converted->ToString();
+std::string ConverterStream::ConvertChunk(std::string_view input) {
+  if (!input.empty()) {
+    pending.append(input);
+  }
+  const size_t flushable =
+      internal::FlushableByteCount(pending, maxKeepChars);
+  if (flushable == 0) {
+    return std::string();
+  }
+
+  const std::string output =
+      converter->Convert(std::string_view(pending.data(), flushable));
+  pending.erase(0, flushable);
+  return output;
 }
 
-size_t Converter::Convert(const char* input, char* output) const {
-  const std::string& converted = Convert(input);
-  strcpy(output, converted.c_str());
-  return converted.length();
+std::string ConverterStream::Finish(std::string_view input) {
+  if (!input.empty()) {
+    pending.append(input);
+  }
+  return Finish();
 }
+
+std::string ConverterStream::Finish() {
+  const std::string output =
+      pending.empty() ? std::string()
+                      : converter->Convert(std::string_view(pending));
+  pending.clear();
+  return output;
+}
+
